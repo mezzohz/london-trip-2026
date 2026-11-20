@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>London, Together</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#173d30">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: map-first app. Phone = full-screen views switched by a bottom tab bar; desktop = side panel + map. */
+:root{
+  --ink:#14211c; --muted:#5d6b65; --bg:#f6f8f6; --panel:#ffffff; --line:#dfe6e2;
+  --brand:#173d30; --brand-2:#2c6b54; --brand-ink:#ffffff;
+  --h-F:#1d8a4e; --h-O:#2a72b5; --h-A:#c98400; --h-N:#8b938f; --h-X:#c0392b;
+  --today:#fff4d6;
+  --font-head:"Space Grotesk",system-ui,sans-serif; --font-body:"Inter",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --ink:#e7eeea; --muted:#9aaba3; --bg:#0f1714; --panel:#16211d; --line:#26352f;
+  --brand:#0c2a20; --brand-2:#5fb38f; --today:#2b2614; color-scheme:dark;
+  --h-F:#3fbf74; --h-O:#5aa2e6; --h-A:#e5a52a; --h-N:#7d8783; --h-X:#e5604f;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.5 var(--font-body);color:var(--ink);background:var(--bg);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance;letter-spacing:-.01em}
+a{color:var(--brand-2)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brand-2);outline-offset:2px}
+
+header{background:var(--brand);color:var(--brand-ink);padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));display:flex;align-items:center;gap:12px}
+header h1{font-size:19px;font-weight:700}
+header .sub{font-size:12px;opacity:.75;letter-spacing:.02em}
+header .grow{flex:1;min-width:0}
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.1);padding:3px;border-radius:10px}
+.tabs button{border:0;background:none;color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:500;font-size:14px}
+.tabs button[aria-selected=true]{background:#fff;color:var(--brand)}
+
+main{flex:1;min-height:0;display:flex;position:relative}
+#map{flex:1;min-width:0;background:var(--line)}
+.panel{width:420px;max-width:100%;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column}
+.view{display:none}.view.on{display:block}
+
+/* filters */
+.bar{position:sticky;top:0;z-index:5;background:var(--panel);padding:12px 16px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.search{display:flex;gap:8px}
+.search input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.btn{border:1px solid var(--line);background:var(--bg);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:500;white-space:nowrap;font-size:14px}
+.btn.primary{background:var(--brand-2);border-color:var(--brand-2);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 10px 4px 8px;font-size:13px;cursor:pointer;user-select:none}
+.chip .dot{width:10px;height:10px;border-radius:50%}
+.chip[aria-pressed=false]{opacity:.45}
+.chip[aria-pressed=false] .dot{background:transparent!important;box-shadow:inset 0 0 0 1.5px var(--muted)}
+.count{font-size:12px;color:var(--muted)}
+.sortrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sort{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.sort select{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:4px 6px}
+.stars{display:inline-flex;align-items:center;gap:3px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.stars b{color:#e8a317;font-weight:400}
+.stars small{font-weight:400;color:var(--muted)}
+.pp-r{font-size:13px;margin:2px 0}
+.pp-r small{color:#5d6b65}
+
+/* place list */
+.list{list-style:none;margin:0;padding:0}
+.item{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:start}
+.item:hover{background:var(--bg)}
+.item .dot{width:12px;height:12px;border-radius:50%;margin-top:5px;grid-row:span 3}
+.item .nm{font-weight:600;min-width:0}
+.item .dist{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.item .meta,.item .nt{grid-column:2 / 4;font-size:13px;color:var(--muted);min-width:0}
+.item .nt{color:var(--ink);opacity:.85}
+.tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:4px;margin-right:4px;vertical-align:1px}
+.tag.sug{background:#f2b3ab;color:#5a1c14}
+.tag.nopin{background:var(--line);color:var(--muted)}
+
+/* itinerary */
+.days{padding:8px 0 24px}
+.day{padding:16px 16px 6px;border-bottom:1px solid var(--line)}
+.day.today{background:var(--today)}
+.day .when{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-2)}
+.day.today .when::after{content:" · Today";color:var(--h-A)}
+.day h2{font-size:21px;margin:2px 0 2px}
+.day .areas{font-size:13px;color:var(--muted);margin-bottom:8px}
+.stop{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:8px 0;border-top:1px dashed var(--line)}
+.stop .t{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:2px}
+.stop h3{font-size:15px;font-family:var(--font-body);font-weight:600}
+.stop p{margin:2px 0 4px;font-size:14px}
+.links{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px}
+.links a,.links button{background:none;border:0;padding:0;color:var(--brand-2);text-decoration:underline;cursor:pointer;font-size:13px}
+.settle{margin:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.settle h2{font-size:16px;margin-bottom:6px}
+.settle ul{margin:0;padding-left:18px;font-size:14px}
+.settle li{margin:3px 0}
+.fine{font-size:12px;color:var(--muted);padding:12px 16px 24px}
+
+/* map bits */
+.pin{width:18px;height:18px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.pin.sug{border-color:#f2b3ab}
+.pin.stopPin{border-radius:4px;background:var(--brand);transform:rotate(45deg);width:14px;height:14px}
+.me{width:16px;height:16px;border-radius:50%;background:#2f7bf6;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,123,246,.25)}
+.leaflet-popup-content{margin:12px 14px;font:14px/1.45 var(--font-body);min-width:220px}
+.leaflet-popup-content h3{font-family:var(--font-head);font-size:16px;margin-bottom:2px}
+.pp-h{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;margin:4px 0}
+.pp-h i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.pp-ad{color:#5d6b65;font-size:13px}
+.pp-btns{display:flex;gap:8px;margin-top:8px}
+.pp-btns a{flex:1;text-align:center;padding:7px 8px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;background:#eef3f0;color:#173d30!important}
+.pp-btns a.go{background:#2c6b54;color:#fff!important}
+.mapctl{position:absolute;right:calc(12px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));z-index:500;display:flex;flex-direction:column;gap:8px}
+.mapctl .btn{box-shadow:0 2px 8px rgba(0,0,0,.2);background:var(--panel)}
+.toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:600;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;max-width:90%}
+@media (prefers-color-scheme:dark){
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
+  .leaflet-container{background:#1b2420}
+}
+
+/* phone */
+@media (max-width:899px){
+  .tabs{display:none}
+  main{flex-direction:column}
+  .panel{position:absolute;inset:0;width:auto;border:0;z-index:1100;display:none}
+  .panel.open{display:flex}
+  nav.bottom.bottom{display:flex}
+  .mapctl{bottom:calc(16px + env(safe-area-inset-bottom))}
+}
+nav.bottom{display:none;background:var(--panel);border-top:1px solid var(--line);padding:0 max(8px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px,env(safe-area-inset-left))}
+nav.bottom button{flex:1;border:0;background:none;padding:10px 4px 9px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.bottom button svg{width:22px;height:22px}
+nav.bottom button[aria-selected=true]{color:var(--brand-2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="grow">
+    <h1>London, Together</h1>
+    <div class="sub">20–27 November 2026 · halal food map &amp; itinerary</div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-view="places" aria-selected="true">Places</button>
+    <button role="tab" data-view="itin" aria-selected="false">Itinerary</button>
+  </div>
+</header>
+<main>
+  <aside class="panel" id="panel">
+    <section class="view on" id="v-places">
+      <div class="bar">
+        <div class="search">
+          <input id="q" type="search" placeholder="Search name, area, food…" autocomplete="off">
+          <button class="btn primary" id="near">Near me</button>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="sortrow"><span class="count" id="count"></span>
+          <label class="sort">Sort <select id="sort"><option value="name">A–Z</option><option value="rating">Top rated</option><option value="near">Nearest</option></select></label></div>
+      </div>
+      <ul class="list" id="list"></ul>
+      <p class="fine">Halal labels come from your saved posts and operator claims recorded on 14 Nov, not independent certification. Always confirm with staff. Google ratings were captured on 20 Nov 2026; open the place in Google Maps for the live score. Pink tag = our suggestion; everything else is your saved list.</p>
+    </section>
+    <section class="view" id="v-itin">
+      <div class="days" id="days"></div>
+    </section>
+  </aside>
+  <div id="map"></div>
+  <div class="mapctl">
+    <button class="btn" id="near2" aria-label="Show my location">◎ Near me</button>
+  </div>
+</main>
+<nav class="bottom" role="tablist">
+  <button role="tab" data-view="map" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Map</button>
+  <button role="tab" data-view="places" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Places</button>
+  <button role="tab" data-view="itin" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Itinerary</button>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const PLACES = [{"id":1,"n":"Apple Butter Cafe – Oxford Circus","a":"Oxford Circus","ad":"4-5 Langham Place, London W1B 3DG","h":"F","s":1,"t":"All-day brunch cafe, 100% halal menu (venue's own wording).","ll":[51.51765,-0.14263],"g":4.3,"gn":788},{"id":2,"n":"Apple Butter Cafe – Seven Dials","a":"Seven Dials","ad":"32-34 Monmouth Street, London WC2H 9HA","h":"F","s":1,"t":"All-day brunch cafe, 100% halal menu (venue's own wording).","ll":[51.51362,-0.12723],"g":4,"gn":2239},{"id":3,"n":"Assa Soho","a":"Soho","ad":"23 Romilly Street, London W1D 5AQ","h":"F","s":1,"t":"Halal Korean.","ll":[51.51284,-0.13134],"g":4.4,"gn":2641},{"id":4,"n":"Bab N Suul","a":"Chinatown","ad":"1 Gerrard Place, London W1D 5PA","h":"O","s":1,"t":"Mostly halal Korean BBQ. Pork and alcohol also sold. Tteokbokki and KFC platter rated 9/10.","ll":[51.5123,-0.13053],"g":4,"gn":1579},{"id":5,"n":"Banana Tree Westbourne Grove","a":"Bayswater","ad":"21-23 Westbourne Grove, London W2 4UA","h":"O","s":0,"t":"Pan-Asian. Operator says all-day-menu meat is halal. Not alcohol-free; ask about your dish.","ll":[51.51548,-0.18957],"g":4.5,"gn":2179},{"id":6,"n":"Band of Burgers Camden","a":"Camden","ad":"23 Camden High Street, London NW1 7JE","h":"O","s":0,"t":"Operator advertises halal burgers. Confirm items and preparation.","ll":[51.53498,-0.13927],"g":4.3,"gn":1513},{"id":7,"n":"Boxcar","a":"Hyde Park / Bayswater","ad":"30 Kendal Street, London W2 2AW","h":"N","s":1,"t":"Bakery and brunch. Marylebone bakery also at 7A Wyndham Place, W1H 1PN.","ll":[51.51486,-0.16628],"g":4.5,"gn":690},{"id":8,"n":"Brasserie Angelica","a":"Fitzrovia","ad":"49 Newman Street, London W1T 3DZ","h":"N","s":1,"t":"Modern European brasserie at The Newman hotel, weekend brunch.","ll":[51.5183,-0.1366],"g":4.8,"gn":117},{"id":9,"n":"Bread Ahead","a":"Borough Market","ad":"Borough Market, London SE1 1TL","h":"A","s":1,"t":"Your bakery stop (21 Nov). Check fillings, gelatine, alcohol. Not halal-certified.","ll":[51.50555,-0.09105],"g":4.3,"gn":2790},{"id":10,"n":"Breadstall – Battersea","a":"Battersea","ad":"56 Northcote Road, London SW11 1PA","h":"O","s":1,"t":"Halal pizza, £8 a slice. Branch in the post unclear, so both listed.","ll":[51.45883,-0.16647],"g":4.6,"gn":480},{"id":11,"n":"Breadstall – Soho","a":"Soho","ad":"92-93 Berwick Street, London W1F 0QB","h":"O","s":1,"t":"Halal pizza, £8 a slice. Branch in the post unclear, so both listed.","ll":[51.5132,-0.13478],"g":4.8,"gn":1621},{"id":12,"n":"Chilli Padi London (Stratford)","a":"Stratford","ad":"3 Aquatics Walk, Stratford Cross, London E20 2AS","h":"F","s":1,"t":"Malaysian: nasi lemak, kuey teow goreng, beef rendang.","ll":[51.54095,-0.01238],"g":4.4,"gn":176},{"id":13,"n":"Coco – Canary Wharf","a":"Canary Wharf","ad":"14 Hertsmere Road, London E14 4AF","h":"A","s":1,"t":"Afternoon tea. Marked halal in the saved ranking; lowest priced in that list.","ll":[51.50752,-0.02261],"g":4.6,"gn":8480},{"id":14,"n":"Coco – Shad Thames","a":"Shad Thames","ad":"34a Shad Thames, London SE1 2YG","h":"A","s":1,"t":"Afternoon tea. Marked halal in the saved ranking; lowest priced in that list.","ll":[51.5033,-0.07275],"g":4.7,"gn":10011},{"id":15,"n":"Conrad London St James","a":"St James's","ad":"22-28 Broadway, London SW1H 0BH","h":"A","s":1,"t":"Afternoon tea. Marked halal in the saved ranking.","ll":[51.49941,-0.13291],"g":4.6,"gn":2510},{"id":16,"n":"Coppa Club, Tower Bridge","a":"Tower Bridge","ad":"3 Three Quays Walk, Lower Thames Street, London EC3R 6AH","h":"N","s":1,"t":"Breakfast in the riverside igloos. Halal not claimed.","ll":[51.50806,-0.07941],"g":4.2,"gn":11063},{"id":17,"n":"Dalloway Terrace","a":"Bloomsbury","ad":"16-22 Great Russell Street, London WC1B 3NN","h":"A","s":1,"t":"At The Bloomsbury Hotel. Marked halal in the saved ranking.","ll":[51.51717,-0.12903],"g":4.4,"gn":1892},{"id":18,"n":"Dapur","a":"Holborn","ad":"13 Lamb's Conduit Passage, London WC1R 4RH","h":"F","s":1,"t":"Malaysian nasi campur, cooked fresh each morning. Mon–Fri 11am–3pm only; sells out. Lunch 23 Nov.","ll":[51.52007,-0.11785],"g":4.6,"gn":456},{"id":19,"n":"Dishoom Carnaby","a":"Soho","ad":"22 Kingly Street, London W1B 5QP","h":"O","s":0,"t":"Indian. Halal chicken, lamb and turkey (operator). Alcohol served. Dinner 23 Nov – not booked yet.","ll":[51.51304,-0.13965],"g":4.7,"gn":22929},{"id":20,"n":"Eight (Eight Hours)","a":"Wandsworth","ad":"Pioneer House, 3 New Acres Lane, London SW18 1UZ","h":"F","s":1,"t":"Was a halal supper club; now a small restaurant with live music. Confirm format and halal status.","ll":[51.46178,-0.19088],"g":4.7,"gn":27},{"id":21,"n":"Engel Bar, Royal Exchange","a":"City","ad":"Mezzanine Floor, Royal Exchange, London EC3V 3LQ","h":"A","s":1,"t":"Marked halal in the saved ranking.","ll":[51.51373,-0.08737],"g":4.6,"gn":418},{"id":22,"n":"Flavour Hubb","a":"Wimbledon","ad":"136 Merton Road, London SW19 1EH","h":"O","s":1,"t":"Halal Thai / SE Asian, green curry. Location conflicting – call +44 7858 593400 before going.","ll":null,"g":5,"gn":149},{"id":23,"n":"Funky Chips","a":"Camden Market","ad":"Unit 704-705, Stables Market, Chalk Farm Road, London NW1 8AH","h":"O","s":1,"t":"Halal loaded chips.","ll":[51.54234,-0.14774],"g":4,"gn":2209},{"id":24,"n":"Funky Noodles","a":"West End","ad":"103 Charing Cross Road, London WC2H 0DT","h":"O","s":1,"t":"Halal Chinese hand-pulled noodles, ~£10–25 pp.","ll":[51.5142,-0.12986],"g":4.6,"gn":2397},{"id":25,"n":"G.O.A.T.","a":"Knightsbridge","ad":"146 Brompton Road, London SW3 1HX","h":"O","s":1,"t":"Halal burgers from the UAE: wagyu patties, truffle fries.","ll":[51.49847,-0.1664],"g":4.6,"gn":821},{"id":26,"n":"Gepuk Nasi Lemak","a":"Soho","ad":"39 Frith Street, London W1D 5LL","h":"F","s":1,"t":"Malaysian/Indonesian/Taiwanese nasi lemak, spicy sambal chicken burger. Confirm current service.","ll":[51.51296,-0.13123],"g":4.4,"gn":178},{"id":27,"n":"Good Friend","a":"Chinatown","ad":"14 Little Newport Street, London WC2H 7JJ","h":"O","s":1,"t":"Taiwanese popcorn chicken with garlic and chilli.","ll":[51.51182,-0.12892],"g":4.3,"gn":1926},{"id":28,"n":"Guillam Coffee House","a":"South Kensington","ad":"24 Gloucester Road, London SW7 4RB","h":"N","s":1,"t":"Speciality coffee; other branches in Notting Hill and Mayfair.","ll":[51.49915,-0.18397],"g":4.5,"gn":801},{"id":29,"n":"Hanwoo Village","a":"Angel, Islington","ad":"19 St Alban's Place, London N1 0NX","h":"A","s":1,"t":"Korean BBQ, halal options on request.","ll":[51.53656,-0.10454],"g":4.7,"gn":751},{"id":30,"n":"Hefaure","a":"Chinatown","ad":"108 Shaftesbury Avenue, London W1D 5EH","h":"O","s":1,"t":"Japanese-style soufflé pancakes.","ll":[51.51224,-0.13092],"g":4.2,"gn":1565},{"id":31,"n":"Hell's Kitchen by Gordon Ramsay","a":"Marble Arch","ad":"The Cumberland Hotel, Great Cumberland Place, London W1H 7DL","h":"N","s":1,"t":"Beef Wellington. Halal not claimed.","ll":[51.51397,-0.15855],"g":4.7,"gn":1046},{"id":32,"n":"Hong Kong Kitchen","a":"Islington","ad":"301 Upper Street, London N1 2TU","h":"O","s":1,"t":"Only fully halal authentic Chinese, with dim sum. Identity unconfirmed (likely Hong Kong Restaurant / HK Cuisine).","ll":null,"g":4.6,"gn":757},{"id":33,"n":"Hoppers Marylebone","a":"Marylebone","ad":"77 Wigmore Street, London W1U 1QE","h":"O","s":0,"t":"Sri Lankan. Halal chicken and lamb; beef is not halal. Alcohol served.","ll":[51.51588,-0.15085],"g":4.6,"gn":5286},{"id":34,"n":"EL&N – Belgravia","a":"Belgravia","ad":"25G Lowndes Street, London SW1X 9JF","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.49873,-0.15789],"g":4.8,"gn":618},{"id":35,"n":"EL&N – Brompton Road","a":"Knightsbridge","ad":"239 Brompton Road, London SW3 2EP","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.49651,-0.16887],"g":4.3,"gn":4375},{"id":36,"n":"EL&N – Carnaby","a":"Carnaby","ad":"35 Great Marlborough Street, London W1F 7JF","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.51403,-0.13923],"g":3.8,"gn":946},{"id":37,"n":"EL&N – Park Lane","a":"Park Lane","ad":"48 Park Lane, London W1K 1PR","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.50677,-0.15178],"g":4.3,"gn":4271},{"id":38,"n":"EL&N – Selfridges","a":"Oxford Street","ad":"400 Oxford Street, London W1A 1AB","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.51459,-0.15281],"g":4.6,"gn":3020},{"id":39,"n":"EL&N – Wardour Street","a":"Soho","ad":"112 Wardour Street, London W1F 0TS","h":"O","s":1,"t":"Halal dining: wagyu steak sandwich, spicy rigatoni. Branch not named in post.","ll":[51.51398,-0.13406],"g":4.3,"gn":4037},{"id":40,"n":"Humble Crumble","a":"Borough Market","ad":"Borough Market, London SE1 1TL","h":"A","s":1,"t":"Your dessert stop (21 Nov). Check ingredients and toppings.","ll":[51.5054,-0.0906],"g":4.5,"gn":1595},{"id":41,"n":"Jana Cafe","a":"Whitechapel","ad":"48 Fieldgate Street, London E1 1ES","h":"F","s":1,"t":"East London cafe known for lamb shank platter. Other unrelated Jana Cafes exist.","ll":[51.51691,-0.06463],"g":4.6,"gn":1352},{"id":42,"n":"Korean BBQ House","a":"Barbican","ad":"107 Whitecross Street, London EC1Y 8JD","h":"F","s":1,"t":"100% halal, no alcohol. Canary Wharf branch too.","ll":[51.52216,-0.09283],"g":4.6,"gn":3829},{"id":43,"n":"Korean Grill Kensington (KGK)","a":"South Kensington","ad":"Millennium Gloucester Hotel, Courtfield Road, London SW7 4LH","h":"F","s":1,"t":"Halal omakase-style Korean BBQ. £68 pp tasting menu; reservation required.","ll":[51.49337,-0.1833],"g":4.4,"gn":296},{"id":44,"n":"Kuro Bakery","a":"Notting Hill","ad":"95 Notting Hill Gate, London W11 3JZ","h":"N","s":1,"t":"Cinnamon scrolls, next to Sweavory.","ll":[51.50872,-0.19745],"g":4.3,"gn":572},{"id":45,"n":"La Dolce","a":"King's Cross","ad":"76 Marchmont Street, London WC1N 1AG","h":"F","s":1,"t":"Halal Italian, no pork, no alcohol. Breakfast, lunch, dinner; family-friendly.","ll":[51.52602,-0.12549],"g":4.7,"gn":846},{"id":46,"n":"Lali","a":"Covent Garden","ad":"90 Long Acre, London WC2E 9NA","h":"F","s":1,"t":"Halal brunch: avocado toast, Turkish eggs, sirniki pancakes.","ll":[51.51468,-0.12295],"g":4.7,"gn":121},{"id":47,"n":"Macellaio RC – Exmouth Market","a":"Clerkenwell","ad":"38-40 Exmouth Market, London EC1R 4QE","h":"O","s":1,"t":"Italian steakhouse with a dedicated halal menu. Alcohol served.","ll":[51.52585,-0.10889],"g":4.7,"gn":1777},{"id":48,"n":"Macellaio RC – Soho","a":"Soho","ad":"39-45 Shaftesbury Avenue, London W1D 6LA","h":"O","s":1,"t":"Italian steakhouse with a dedicated halal menu. Alcohol served.","ll":[51.51183,-0.13288],"g":4.6,"gn":2553},{"id":49,"n":"Macellaio RC – South Kensington","a":"South Kensington","ad":"84 Old Brompton Road, London SW7 3LQ","h":"O","s":1,"t":"Italian steakhouse with a dedicated halal menu. Alcohol served.","ll":[51.49279,-0.17725],"g":4.6,"gn":2176},{"id":50,"n":"Madhu's of Mayfair","a":"Mayfair","ad":"The Dilly Hotel, 21 Piccadilly, London W1J 0BH","h":"A","s":1,"t":"Marked halal in the saved ranking.","ll":[51.50944,-0.13662],"g":4.5,"gn":1357},{"id":51,"n":"Makinori","a":"Soho","ad":"Moor Street, Soho, London W1D 5ND","h":"O","s":1,"t":"Sushi and handrolls, mostly halal, ~£30–60 pp. Sources conflict on exact number (15/16 Moor St or 9 Old Compton St).","ll":[51.5137,-0.13045],"g":4.6,"gn":622},{"id":52,"n":"Mali & Ramen","a":"Soho","ad":"9 Old Compton Street, London W1D 5JF","h":"O","s":1,"t":"Halal meat except the chicken gyoza; pork cooked separately; alcohol served.","ll":[51.51361,-0.12995],"g":4.7,"gn":1636},{"id":53,"n":"Mamasons","a":"Chinatown","ad":"32 Newport Court, London WC2H 7PQ","h":"O","s":1,"t":"Ube ice cream in a toasted milk bun (the Bilog).","ll":[51.51198,-0.12901],"g":4.5,"gn":2140},{"id":54,"n":"Mazlum Cafe","a":"Knightsbridge","ad":"10 Brompton Road, London SW1X 7QN","h":"F","s":1,"t":"Fully halal, no alcohol, prayer facilities. Turkish tea, San Sebastián cheesecake.","ll":[51.50122,-0.16199],"g":4.7,"gn":515},{"id":55,"n":"Mei Mei","a":"Borough Market","ad":"Borough Market, London SE1 9AF","h":"A","s":1,"t":"Your lunch choice (21 Nov). Halal options not confirmed – ask before ordering.","ll":[51.50515,-0.09135],"g":4.4,"gn":2008},{"id":56,"n":"Mimi Mayfair (Mimi Mei Fair)","a":"Mayfair","ad":"55 Curzon Street, London W1J 8PG","h":"F","s":1,"t":"Ranked first in a '5 halal certified spots' video. Duck and dumplings.","ll":[51.50741,-0.14521],"g":4.2,"gn":652},{"id":57,"n":"Mr Pierre White's Steakhouse","a":"Whitechapel / City","ad":"Unconfirmed: 103-107 New Road E1 1HJ or 109-117 Middlesex Street E1 7JF","h":"O","s":1,"t":"London's best halal steak per a video, but the venue isn't pinned down.","ll":null},{"id":58,"n":"Mukbang Pocha","a":"Soho","ad":"10 Golden Square, London W1F 9JA","h":"F","s":1,"t":"Halal Korean, tteokbokki hot pot for sharing.","ll":[51.51173,-0.13639],"g":4.5,"gn":1358},{"id":59,"n":"MyKopitiam","a":"Ealing","ad":"29 Dickens Yard, Longfield Avenue, London W5 2TD","h":"X","s":1,"t":"Malaysian. The saved post says clearly this is NOT halal.","ll":[51.51375,-0.30683],"g":4.6,"gn":60},{"id":60,"n":"Niuko","a":"South Kensington","ad":"111 Gloucester Road, London SW7 4ST","h":"F","s":1,"t":"Fully halal Pan-Asian, no alcohol. Passion fruit king prawns, Malaysian-style noodles.","ll":[51.49358,-0.18174],"g":4.7,"gn":424},{"id":61,"n":"Nuri KBBQ","a":"Canary Wharf","ad":"33 Westferry Circus, London E14 8RR","h":"A","s":1,"t":"Halal Korean BBQ, unlimited meat. Post says no alcohol but website lists beer and soju – check.","ll":[51.50609,-0.02804],"g":4.7,"gn":2088},{"id":62,"n":"Onsu","a":"Soho","ad":"55A Dean Street, London W1D 6AG","h":"O","s":1,"t":"Halal Asian-inspired bakery: ube drink, curry bun, strawberry cheesecake.","ll":[51.51248,-0.13189],"g":4.4,"gn":847},{"id":63,"n":"Ovis Coffee","a":"Tottenham Court Road","ad":"16 St Giles High Street, London WC2H 8LQ","h":"N","s":1,"t":"Viral coffee with edible Cloud Cookie Cups, from £6.","ll":[51.516,-0.12892],"g":4.3,"gn":306},{"id":64,"n":"Pep's (Pepe's Piri Piri)","a":"Edgware Road","ad":"151 Edgware Road, London W2 2HR","h":"F","s":1,"t":"Chicken & rice box. Chain; this is the branch near your base.","ll":[51.51731,-0.16664],"g":4.7,"gn":599},{"id":65,"n":"Petersham Nurseries Cafe","a":"Richmond","ad":"Church Lane, off Petersham Road, Richmond TW10 7AB","h":"N","s":1,"t":"Garden cafe. Halal not claimed.","ll":[51.44723,-0.30261],"g":4.2,"gn":797},{"id":66,"n":"Pochawa Grill","a":"Chinatown","ad":"29 Wardour Street, London W1D 6PS","h":"O","s":1,"t":"Korean BBQ; all chicken dishes halal except the gyoza.","ll":[51.51123,-0.13226],"g":4.4,"gn":808},{"id":67,"n":"Popina","a":"Mayfair","ad":"18-20 Weighhouse Street, London W1K 5AH","h":"N","s":1,"t":"All-day brunch. Recently moved from Duke Street.","ll":[51.51335,-0.15016],"g":4.6,"gn":1512},{"id":68,"n":"Puffy","a":"Soho","ad":"45A Old Compton Street, London W1D 6HQ","h":"N","s":1,"t":"Scoopable warm cookies with soft-serve.","ll":[51.5127,-0.13219],"g":4.4,"gn":1540},{"id":69,"n":"Q Beef Noodles","a":"Soho","ad":"24 Romilly Street, London W1D 5AH","h":"O","s":1,"t":"Halal hand-pulled beef noodles; halal certificate displayed in store.","ll":[51.51287,-0.13125],"g":4.7,"gn":1875},{"id":70,"n":"Ralph's Coffee (Holiday pop-up)","a":"Chelsea","ad":"Sloane Square, London SW1W 8EG","h":"N","s":1,"t":"Seasonal pop-up 12 Nov–20 Dec 2026: gingerbread latte, hot chocolate.","ll":[51.49245,-0.1565]},{"id":71,"n":"Rasa Sayang","a":"Chinatown","ad":"5 Macclesfield Street, London W1D 6AY","h":"O","s":0,"t":"Malaysian / Singaporean. Chinatown's listing describes it as halal. Confirm with the branch.","ll":[51.51198,-0.1315],"g":4.5,"gn":6485},{"id":72,"n":"Roast","a":"Borough Market","ad":"The Floral Hall, Stoney Street, London SE1 1TL","h":"A","s":1,"t":"Marked halal in the saved ranking.","ll":[51.50585,-0.09075],"g":4.0,"gn":3256},{"id":73,"n":"Roti Joupa","a":"Stratford","ad":"85 Vicarage Lane, London E15 4HG","h":"O","s":1,"t":"Trinidadian street food, mains £8–10, doubles.","ll":[51.54042,0.01093],"g":4.7,"gn":197},{"id":74,"n":"Sandwich Pioneers","a":"Bethnal Green","ad":"Railway Arch, 3 Gales Gardens, London E2 0EJ","h":"F","s":1,"t":"Halal steak sandwiches; ghost kitchen – order ahead for pickup.","ll":[51.52654,-0.05666],"g":4.3,"gn":97},{"id":75,"n":"Scott's Richmond","a":"Richmond","ad":"4 Whittaker Avenue, Richmond TW9 1EH","h":"N","s":1,"t":"Riverside seafood. Halal not claimed.","ll":[51.45849,-0.30674],"g":4.3,"gn":1144},{"id":76,"n":"Sexy Fish","a":"Mayfair","ad":"Berkeley Square House, Berkeley Square, London W1J 6BR","h":"O","s":1,"t":"Post says all dishes at Sunday unlimited brunch (12–4pm, £58 pp) are halal.","ll":[51.50988,-0.14456],"g":4.2,"gn":6842},{"id":77,"n":"Shah's Halal Food","a":"Soho","ad":"9-12 St Anne's Court, London W1F 0BB","h":"F","s":1,"t":"Chain from the Iftar list; Soho branch chosen.","ll":[51.51432,-0.13403],"g":4.7,"gn":1361},{"id":78,"n":"Stamp Brasserie","a":"Green Lanes","ad":"509-511 Green Lanes, London N4 1AN","h":"F","s":1,"t":"Steak and chips £19 Fri–Sun evenings; Australian halal meat.","ll":[51.58176,-0.09985],"g":4.7,"gn":1038},{"id":79,"n":"Stefania","a":"Notting Hill","ad":"52 Westbourne Grove, London W2 5SH","h":"F","s":1,"t":"Halal, pork-free Roman Italian. Check alcohol in desserts.","ll":[51.51555,-0.19179],"g":4.9,"gn":82},{"id":80,"n":"Sushi Samurai","a":"Holloway","ad":"300 Holloway Road, London N7 6NJ","h":"F","s":1,"t":"Fully halal Japanese, no alcohol. Sushi, bao, small plates.","ll":[51.55486,-0.11466],"g":4.9,"gn":272},{"id":81,"n":"Sweavory","a":"Notting Hill","ad":"89 Notting Hill Gate, London W11 3JZ","h":"O","s":1,"t":"Halal Italian deli.","ll":[51.50884,-0.19726999999999997],"g":4.9,"gn":1071},{"id":82,"n":"Tea Point","a":"Manor Park","ad":"621 Romford Road, London E12 5AD","h":"F","s":1,"t":"Halal late-night cafe: club sandwich, ube drink, chai, karak.","ll":[51.55002,0.04541],"g":4.5,"gn":296},{"id":83,"n":"The Azuki Room","a":"Holborn","ad":"Rolls Passage, off 36 Chancery Lane, London EC4A 1HL","h":"F","s":1,"t":"Fully halal Japanese izakaya: sushi counter, yakitori.","ll":[51.51595,-0.11105],"g":4.8,"gn":181},{"id":84,"n":"The Drawing Room, Raffles at The OWO","a":"Whitehall","ad":"57 Whitehall, London SW1A 2BX","h":"N","s":1,"t":"Gruffalo Afternoon Tea for children. Halal not claimed.","ll":[51.50642,-0.12686],"g":4.5,"gn":45},{"id":85,"n":"The Food District","a":"Edgware Road","ad":"145-147 Edgware Road, London W2 2HR","h":"F","s":1,"t":"Fully halal food hall: Afghan, Indian, Japanese/Thai, Moroccan, Vietnamese, Malaysian stalls.","ll":[51.517430000000004,-0.16646],"g":4.6,"gn":741},{"id":86,"n":"The Waldorf Hilton","a":"Aldwych","ad":"Aldwych, London WC2B 4DD","h":"A","s":1,"t":"Afternoon tea. Marked halal in the saved ranking (highest priced).","ll":[51.51264,-0.11936],"g":4.4,"gn":4553},{"id":87,"n":"Tower Bridge Collective","a":"Tower Bridge","ad":"1 Horselydown Lane, London SE1 2LJ","h":"O","s":1,"t":"Food hall; all traders serve halal options. Ask Chocolate Bar UK for halal marshmallows.","ll":[51.50375,-0.0757],"g":4.6,"gn":1206},{"id":88,"n":"YiQi Lah!","a":"Chinatown","ad":"18 Newport Court, London WC2H 7JS","h":"F","s":1,"t":"100% halal, no pork, no alcohol. Malaysian/Indonesian/Chinese/Thai. Small, expect queues.","ll":[51.51188,-0.12904],"g":4.8,"gn":403},{"id":89,"n":"Zula","a":"Marble Arch","ad":"5 Old Quebec Street, London W1H 7AF","h":"F","s":1,"t":"Halal beef burgers.","ll":[51.51386,-0.15803],"g":4.6,"gn":1572}];
+
+const HALAL = {
+  F:{label:"Halal (claimed)", long:"Fully halal per saved post / operator"},
+  O:{label:"Halal options", long:"Halal options – confirm your items"},
+  A:{label:"Ask first", long:"Request or confirm halal before ordering"},
+  N:{label:"No halal claim", long:"No halal claim – needs checking"},
+  X:{label:"Not halal", long:"NOT halal (per the saved post)"}
+};
+const color = h => getComputedStyle(document.documentElement).getPropertyValue('--h-'+h).trim();
+
+// Itinerary. ll = map point for the stop; r = restaurant ids linked to it.
+const DAYS = [
+ {d:"2026-11-20", when:"Fri 20 Nov", title:"Hello, London.", areas:"Arrival · Paddington", note:"Flight details to confirm", stops:[
+  {t:"06:00 SGT", h:"Changi Airport T3", p:"Arrive for SQ308, departing 09:00 Singapore time.", q:"Changi Airport Terminal 3"},
+  {t:"15:20 GMT", h:"Land at Heathrow T2", p:"Allow for immigration and baggage.", ll:[51.4700,-0.4543], q:"Heathrow Terminal 2"},
+  {t:"After arrival", h:"Heathrow Express → Paddington", p:"Buy train tickets, then walk to the Airbnb. Exact accommodation address still needed.", ll:[51.5154,-0.1755], q:"London Paddington station"},
+  {t:"Evening", h:"Check in & easy dinner", p:"Note says \"Meatbros\" – exact branch to confirm. Nearby on the list: The Food District and Pep's on Edgware Road.", r:[85,64]}
+ ]},
+ {d:"2026-11-21", when:"Sat 21 Nov", title:"Art, bites & the riverside.", areas:"Tate Modern · Borough · Tower Bridge", note:"Suggested timings", stops:[
+  {t:"08:30", h:"Breakfast near Paddington", p:"Shortlist: La Costa Cafe, Sheila's Cafe, Les Filles Cafe Lancaster Gate, Venice London, Treeology, Mimos Cafe Bar."},
+  {t:"10:00", h:"Tate Modern", p:"Allow around two hours. Check exhibitions and opening times.", ll:[51.5076,-0.0994], q:"Tate Modern"},
+  {t:"12:30", h:"Borough Market food stop", p:"Mei Mei for lunch, Bread Ahead and Humble Crumble for treats. Check halal options with each trader.", r:[55,9,40]},
+  {t:"15:00", h:"Walk to Tower Bridge", p:"Head east along the river. Tower Bridge Collective has halal options; ask Chocolate Bar UK for halal marshmallows. WatchHouse is another coffee stop.", ll:[51.5055,-0.0754], q:"Tower Bridge", r:[87]},
+  {t:"Evening", h:"Flexible dinner", p:"Sushi Co is a saved idea; branch and halal arrangements to confirm."}
+ ]},
+ {d:"2026-11-22", when:"Sun 22 Nov", title:"Bookshops & park paths.", areas:"Marylebone · Regent's Park · Camden", note:"Suggested timings", stops:[
+  {t:"09:00", h:"Monocle Café", p:"Breakfast on Chiltern Street. Check menu suitability.", ll:[51.5196,-0.1555], q:"Monocle Cafe Chiltern Street London"},
+  {t:"10:00", h:"Daunt Books & Marylebone", p:"Browse the bookshop and surrounding streets. WatchHouse also in your notes.", ll:[51.5205,-0.1518], q:"Daunt Books Marylebone"},
+  {t:"12:00", h:"Regent's Park", p:"A relaxed walk; swap for an indoor stop if the weather turns.", ll:[51.5313,-0.1570], q:"Regent's Park"},
+  {t:"14:00", h:"Primrose Hill", p:"Go while it is light for the view.", ll:[51.5394,-0.1609], q:"Primrose Hill"},
+  {t:"15:30", h:"Camden Market · optional", p:"Continue if you feel like more exploring. Halal nearby: Funky Chips, Band of Burgers.", ll:[51.5415,-0.1460], q:"Camden Market", r:[23,6]}
+ ]},
+ {d:"2026-11-23", when:"Mon 23 Nov", title:"The London classics.", areas:"Westminster · South Bank", note:"Suggested day · not booked", stops:[
+  {t:"Morning", h:"Buckingham Palace / St James's Park", p:"Exterior visit and a park walk.", ll:[51.5014,-0.1419], q:"Buckingham Palace"},
+  {t:"Late morning", h:"Westminster & Big Ben", p:"Then travel to Holborn for lunch – Dapur is not near Westminster.", ll:[51.5007,-0.1246], q:"Big Ben"},
+  {t:"12:00", h:"Lunch at Dapur", p:"13 Lamb's Conduit Passage, WC1R 4RH. Weekdays 11am–3pm; can sell out.", r:[18]},
+  {t:"Afternoon", h:"South Bank stroll", p:"Cross Westminster Bridge and explore. Proposed alternative: Covent Garden, Neal's Yard and Seven Dials instead.", ll:[51.5055,-0.1160], q:"South Bank London"},
+  {t:"18:30", h:"Dinner at Dishoom Carnaby", p:"22 Kingly Street, W1B 5QP. Not booked yet. Halal chicken, lamb and turkey; alcohol served.", r:[19]}
+ ]},
+ {d:"2026-11-24", when:"Tue 24 Nov", title:"Museum, Battersea & the fair.", areas:"Natural History Museum · Battersea · Winter Wonderland", note:"Tickets not booked", stops:[
+  {t:"Early · optional", h:"Breakfast in Notting Hill", p:"Only if you start early. Saved nearby: Stefania, Sweavory, Kuro Bakery.", ll:[51.5090,-0.1960], q:"Notting Hill Gate", r:[79,81,44]},
+  {t:"Morning", h:"Natural History Museum", p:"Allow about two hours. Check opening times and entry.", ll:[51.4967,-0.1764], q:"Natural History Museum London"},
+  {t:"Noon–14:30", h:"Battersea Power Station & lunch", p:"Explore with a lunch break. Restaurant still to choose.", ll:[51.4818,-0.1445], q:"Battersea Power Station"},
+  {t:"14:30–16:00", h:"Travel to Hyde Park & rest", p:"Leave a comfortable buffer before the fair.", ll:[51.5073,-0.1657], q:"Hyde Park London"},
+  {t:"16:00–19:00", h:"Hyde Park Winter Wonderland", p:"Pre-book a dated entry slot (not booked). Open noon–10pm on 24 Nov.", ll:[51.5070,-0.1560], q:"Hyde Park Winter Wonderland"},
+  {t:"Evening", h:"Dinner · still to choose", p:"Close to the fair: Zula (Marble Arch), The Food District and Pep's (Edgware Rd).", r:[89,85,64]}
+ ]},
+ {d:"2026-11-25", when:"Wed 25 Nov", title:"Bicester shopping day.", areas:"Car collection · Bicester Village", note:"Full shopping day", stops:[
+  {t:"Morning", h:"Collect the rental car", p:"Pickup time and address still to add. Keep the car for Manchester on 27 Nov."},
+  {t:"After pickup", h:"Drive to Bicester Village", p:"About 1.5 hours from central London.", q:"Bicester Village"},
+  {t:"Rest of day", h:"Shopping at Bicester Village", p:"Lunch and breaks when you like.", q:"Bicester Village"},
+  {t:"Evening", h:"Return to London", p:"Dinner and rest. Overnight parking still to add."}
+ ]},
+ {d:"2026-11-26", when:"Thu 26 Nov", title:"Richmond & the Seven Sisters.", areas:"Richmond Hill · Seven Sisters · Back to London", note:"Weather-dependent", stops:[
+  {t:"08:00–09:15", h:"Breakfast around Richmond Hill", p:"Venue still to choose. Short stop for the view.", ll:[51.4508,-0.2950], q:"Richmond Hill viewpoint"},
+  {t:"09:15", h:"Drive to Seven Sisters", p:"Roughly 2–2.5 hours. Check the route before setting off.", q:"Seven Sisters Country Park"},
+  {t:"Noon–14:30", h:"Seven Sisters: lunch & short walk", p:"Keep the walk short. Lunch venue still to choose.", q:"Seven Sisters Country Park"},
+  {t:"By 15:00", h:"Drive back to London", p:"Leave in good time; return depends on traffic."},
+  {t:"Evening", h:"Easy dinner & packing", p:"Selfridges and Bond Street still need a slot (EL&N Selfridges is on the list).", r:[38]}
+ ]},
+ {d:"2026-11-27", when:"Fri 27 Nov", title:"Next stop, Manchester.", areas:"London → Manchester by car", note:"Departure time to confirm", stops:[
+  {t:"Morning", h:"Breakfast & checkout", p:"Pack the car and check out."},
+  {t:"Time TBC", h:"Drive to Manchester", p:"Departure time and Manchester address still to add; allow for breaks.", q:"Manchester"}
+ ]}
+];
+const SETTLE = [
+  "Selfridges and Bond Street need a new slot.",
+  "Covent Garden / Neal's Yard / Seven Dials proposed for 23 Nov afternoon instead of South Bank (not confirmed).",
+  "Rental car pickup, London overnight parking, Manchester address and departure time.",
+  "Richmond breakfast and Seven Sisters lunch venues not chosen.",
+  "Winter Wonderland tickets and restaurant reservations not booked."
+];
+
+const byId = Object.fromEntries(PLACES.map(p=>[p.id,p]));
+const gq = s => 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s);
+const gdir = s => 'https://www.google.com/maps/dir/?api=1&travelmode=transit&destination='+encodeURIComponent(s);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RATED_ON = '20 Nov 2026';
+const fmtN = n => n>=1000 ? (n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,'')+'k' : String(n);
+const stars = p => p.g ? `<span class="stars"><b>★</b>${p.g.toFixed(1)} <small>(${fmtN(p.gn)})</small></span>` : '';
+
+// ---------- map ----------
+const map = L.map('map',{zoomControl:false}).setView([51.512,-0.135],13);
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+
+const markers = {};
+function popupHtml(p){
+  const q = p.n+', '+p.ad;
+  return `<h3>${esc(p.n)}</h3>
+   <div class="pp-ad">${esc(p.a)} · ${esc(p.ad)}</div>
+   ${p.g?`<div class="pp-r">${stars(p)} <small>Google · ${RATED_ON}</small></div>`:''}
+   <div class="pp-h"><i style="background:${color(p.h)}"></i>${HALAL[p.h].long}</div>
+   <div>${p.s?'':'<span class="tag sug">Our suggestion</span>'}${esc(p.t)}</div>
+   <div class="pp-btns"><a class="go" href="${gdir(q)}" target="_blank" rel="noopener">Directions</a><a href="${gq(q)}" target="_blank" rel="noopener">Google Maps</a></div>`;
+}
+PLACES.forEach(p=>{
+  if(!p.ll) return;
+  const icon = L.divIcon({className:'',html:`<div class="pin${p.s?'':' sug'}" style="background:${color(p.h)}"></div>`,iconSize:[18,18],iconAnchor:[9,9],popupAnchor:[0,-8]});
+  markers[p.id] = L.marker(p.ll,{icon,title:p.n}).bindPopup(popupHtml(p),{maxWidth:280});
+});
+const stopLayer = L.layerGroup();
+
+// ---------- filters & list ----------
+const state = {on:new Set(['F','O','A']), q:'', me:null};
+try{ const s = JSON.parse(localStorage.getItem('ldn-filters')); if(Array.isArray(s)) state.on = new Set(s); }catch(e){}
+const chips = document.getElementById('chips');
+Object.entries(HALAL).forEach(([k,v])=>{
+  const b=document.createElement('button'); b.className='chip'; b.dataset.k=k;
+  b.innerHTML=`<span class="dot" style="background:${color(k)}"></span>${v.label} <span class="count" data-c="${k}"></span>`;
+  b.setAttribute('aria-pressed',state.on.has(k));
+  b.onclick=()=>{ state.on.has(k)?state.on.delete(k):state.on.add(k); b.setAttribute('aria-pressed',state.on.has(k)); try{localStorage.setItem('ldn-filters',JSON.stringify([...state.on]))}catch(e){} render(); };
+  chips.appendChild(b);
+});
+Object.keys(HALAL).forEach(k=>{ chips.querySelector(`[data-c="${k}"]`).textContent = PLACES.filter(p=>p.h===k).length; });
+
+function km(a,b){const R=6371,r=Math.PI/180,dl=(b[0]-a[0])*r,dg=(b[1]-a[1])*r;const x=Math.sin(dl/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+function fmt(d){return d<1?Math.round(d*1000/10)*10+' m':d.toFixed(1)+' km'}
+
+function render(){
+  const q = state.q.toLowerCase();
+  let rows = PLACES.filter(p=>state.on.has(p.h) && (!q || (p.n+' '+p.a+' '+p.ad+' '+p.t).toLowerCase().includes(q)));
+  const sort = document.getElementById('sort').value;
+  if(sort==='near' && state.me) rows.sort((a,b)=>(a.ll?km(state.me,a.ll):1e9)-(b.ll?km(state.me,b.ll):1e9));
+  else if(sort==='rating') rows.sort((a,b)=>(b.g||0)-(a.g||0) || (b.gn||0)-(a.gn||0));
+  else rows.sort((a,b)=>a.n.localeCompare(b.n));
+  const shown = new Set(rows.map(p=>p.id));
+  Object.entries(markers).forEach(([id,m])=>{ shown.has(+id)? m.addTo(map) : m.remove(); });
+  document.getElementById('count').textContent = `${rows.length} of ${PLACES.length} places`;
+  document.getElementById('list').innerHTML = rows.map(p=>`
+    <li class="item" data-id="${p.id}">
+      <span class="dot" style="background:${color(p.h)}"></span>
+      <span class="nm">${esc(p.n)}</span>
+      <span class="dist">${stars(p)}${state.me&&p.ll?'<br>'+fmt(km(state.me,p.ll)):''}</span>
+      <span class="meta">${p.s?'':'<span class="tag sug">Suggestion</span>'}${p.ll?'':'<span class="tag nopin">No pin</span>'}${esc(p.a)} · ${HALAL[p.h].label}</span>
+      <span class="nt">${esc(p.t)}</span>
+    </li>`).join('');
+}
+document.getElementById('list').onclick = e=>{
+  const li=e.target.closest('.item'); if(!li) return; focusPlace(+li.dataset.id);
+};
+document.getElementById('q').oninput = e=>{ state.q=e.target.value; render(); };
+document.getElementById('sort').onchange = e=>{ if(e.target.value==='near' && !state.me) locate(); render(); };
+
+function focusPlace(id){
+  const p=byId[id];
+  if(!p.ll){ window.open(gq(p.n+', '+p.ad),'_blank'); return; }
+  if(!state.on.has(p.h)){ state.on.add(p.h); chips.querySelector(`[data-k="${p.h}"]`).setAttribute('aria-pressed',true); render(); }
+  show('map');
+  setTimeout(()=>{ map.invalidateSize(); map.setView(p.ll,16); markers[id].addTo(map).openPopup(); },60);
+}
+
+// ---------- itinerary ----------
+const todayLdn = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London'}).format(new Date());
+document.getElementById('days').innerHTML = DAYS.map((d,i)=>`
+  <article class="day${d.d===todayLdn?' today':''}" id="day-${i}">
+    <div class="when">${d.when}</div>
+    <h2>${esc(d.title)}</h2>
+    <div class="areas">${esc(d.areas)} · ${esc(d.note)}</div>
+    ${d.stops.map((s,j)=>`
+      <div class="stop">
+        <div class="t">${esc(s.t)}</div>
+        <div>
+          <h3>${esc(s.h)}</h3>
+          <p>${esc(s.p)}</p>
+          <div class="links">
+            ${s.ll?`<button data-stop="${i}-${j}">Show on map</button>`:''}
+            ${s.q?`<a href="${gdir(s.q)}" target="_blank" rel="noopener">Directions</a>`:''}
+            ${(s.r||[]).map(id=>`<button data-place="${id}">${esc(byId[id].n)}</button>`).join('')}
+          </div>
+        </div>
+      </div>`).join('')}
+    ${DAYS[i].stops.some(s=>s.ll)?`<div class="links" style="padding:4px 0 10px"><button data-day="${i}">Show the whole day on the map</button></div>`:''}
+  </article>`).join('') + `
+  <div class="settle"><h2>Still to settle</h2><ul>${SETTLE.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div>`;
+
+document.getElementById('days').onclick = e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.place) return focusPlace(+b.dataset.place);
+  const pts=[];
+  stopLayer.clearLayers();
+  const di = b.dataset.day ?? b.dataset.stop.split('-')[0];
+  DAYS[di].stops.forEach((s,j)=>{
+    if(!s.ll) return;
+    const m=L.marker(s.ll,{icon:L.divIcon({className:'',html:'<div class="pin stopPin"></div>',iconSize:[14,14],iconAnchor:[7,7]})})
+      .bindPopup(`<h3>${esc(s.h)}</h3><div class="pp-ad">${esc(DAYS[di].when)} · ${esc(s.t)}</div><div>${esc(s.p)}</div>${s.q?`<div class="pp-btns"><a class="go" href="${gdir(s.q)}" target="_blank" rel="noopener">Directions</a></div>`:''}`);
+    m.addTo(stopLayer); pts.push(s.ll);
+    if(b.dataset.stop===`${di}-${j}`) m._focus=true;
+  });
+  stopLayer.addTo(map);
+  show('map');
+  setTimeout(()=>{
+    map.invalidateSize();
+    const f = stopLayer.getLayers().find(m=>m._focus);
+    if(f){ map.setView(f.getLatLng(),15); f.openPopup(); }
+    else map.fitBounds(pts,{padding:[50,50],maxZoom:15});
+  },60);
+};
+
+// ---------- views ----------
+const panel=document.getElementById('panel');
+function show(v){
+  const desktop = matchMedia('(min-width:900px)').matches;
+  if(v==='map'){ if(!desktop) panel.classList.remove('open'); }
+  else{
+    document.getElementById('v-places').classList.toggle('on',v==='places');
+    document.getElementById('v-itin').classList.toggle('on',v==='itin');
+    panel.classList.add('open'); panel.scrollTop=0;
+    if(v==='itin'){ const t=document.querySelector('.day.today'); if(t) setTimeout(()=>t.scrollIntoView({block:'start'}),0); }
+  }
+  document.querySelectorAll('[data-view]').forEach(b=>{
+    const cur = desktop ? (v==='map'? b.getAttribute('aria-selected')==='true' && b.dataset.view!=='map' : b.dataset.view===v) : b.dataset.view===v;
+    b.setAttribute('aria-selected', cur);
+  });
+  if(v!=='map' && location.hash!=='#'+v) history.replaceState(null,'','#'+v);
+  if(v==='map') history.replaceState(null,'',location.pathname);
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>show(b.dataset.view));
+
+// ---------- near me ----------
+let meMarker;
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.querySelector('main').appendChild(t);setTimeout(()=>t.remove(),3500);}
+function locate(){
+  if(!navigator.geolocation) return toast('Location is not available in this browser.');
+  toast('Finding your location…');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    state.me=[pos.coords.latitude,pos.coords.longitude];
+    if(!meMarker) meMarker=L.marker(state.me,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[16,16],iconAnchor:[8,8]}),zIndexOffset:1000}).addTo(map);
+    else meMarker.setLatLng(state.me);
+    map.setView(state.me,15);
+    document.getElementById('sort').value='near';
+    render();
+  },err=>toast('Could not get your location. Allow location access for this site and try again.'),{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+}
+document.getElementById('near').onclick=()=>{locate();};
+document.getElementById('near2').onclick=locate;
+
+render();
+const start = location.hash.slice(1);
+if(['places','itin'].includes(start)) show(start);
+else if(matchMedia('(min-width:900px)').matches) show('places');
+else show('map');
+// Desktop starts on itinerary if the trip is in progress
+if(!start && matchMedia('(min-width:900px)').matches && document.querySelector('.day.today')) show('itin');
+</script>
+</body>
+</html>
